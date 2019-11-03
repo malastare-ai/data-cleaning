@@ -1,0 +1,173 @@
+---
+title: "Data Cleaning"
+author: "Rihad Variawa"
+date: "11/3/2019"
+output: html_document
+---
+
+## Executive Summary
+
+The weather dataset is a messy, real-world dataset containing an entire year’s worth of weather data from Boston, USA. Our data cleaning process is composed of three parts:
+
+### First, Eploring Raw Data.
+
+### Second, Tyding Data. Issues addressed in this section include:
+
+* Column headers are values, not variable names: from X1 to X31;
+* Meaningless column: X as observational index;
+* Variables are stored in both the column: variable measure with max, min, and mean tempretures.
+
+### Third and last, Preparing Data for Analysis, covering:
+
+* day with unecessary leading “X”s
+* Date can be united with year, month, and date (yyyy-mm-dd)
+* Variable types are not always correct: most characters should be coerced into numerics (for  PrecipitationIn, there are “T” values indicating “Trace”, or 0 in number)
+* Finding missing values: in Max.Gust.SpeedMPH
+* Dealing with obvious errors: in Max.Humidity and Mean.VisibilityMiles
+* Dealing with empty strings: in Events
+
+
+#### Loading Libraries 
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+if(!require(tidyr)){install.packages("tidtr")}
+if(!require(stringr)){install.packages("stringr")}
+if(!require(lubridate)){install.packages("lubridate")}
+
+
+library(tidyr)
+library(stringr)
+library(lubridate)
+library(dplyr)
+```
+
+#### Getting Data
+
+```{r}
+# download data
+if(!file.exists("weather.rds")){
+  download.file("https://assets.datacamp.com/production/repositories/34/datasets/b3c1036d9a60a9dfe0f99051d2474a54f76055ea/weather.rds", "weather.rds")
+  dateDownloaded <- date()
+}
+
+# load data
+weather <- readRDS("weather.rds")
+```
+
+#### EDA
+
+```{r}
+# verify that weather is a data.frame
+class(weather)
+```
+
+```{r}
+glimpse(weather)
+```
+
+```{r}
+# preview firat 10 rows
+head(weather, n = 10)
+```
+
+#### Data Tidying
+Issues to address
+
+* Column headers are values, not variable names: from X1 to X31
+* Meaningless column: X as observations index
+* Variables are stored in both the column: variable measure with max, min, and mean temperature
+
+```{r}
+# gather columns
+weather2 <- gather(weather, day, value, X1:X31, na.rm = TRUE)
+```
+
+```{r}
+# preview head
+head(weather2)
+```
+
+```{r}
+# first remove column of row names
+weather2 <- weather2[, -1]
+
+# spread the data
+weather3 <- spread(weather2, measure, value)
+
+# preview head
+head(weather3)
+```
+
+#### Preparing Data For Analysis
+Issues to address
+
+* day with unnecssary leading "X"s
+* Date can be united with year, month, and date(yyyy-mm-dd)
+
+```{r}
+# remove X from day column
+weather3$day <- str_replace(weather3$day, "X", "")
+
+# unite year, month and day columns
+weather4 <- unite(weather3, date, year, month, day, sep = "-")
+
+# convert date column to proper date format using lubridates's ymd()
+weather4$date <- ymd(weather4$date)
+
+# rearrange columns using dplyr select()
+weather5 <- weather4 %>% 
+  select(date, Events, CloudCover:WindDirDegrees)
+
+# preview weather5
+head(weather5)
+```
+
+Additional issues include:
+
+* Variable types are not always correct: most characters should be coerced into numerics (for  PrecipitationIn, there are “T” values indicating “Trace”, or 0 in number)
+
+```{r}
+# preview structure of weather5
+str(weather5)
+```
+
+```{r}
+# replace "T" with "0" (T = trace)
+weather5$PrecipitationIn <- str_replace(weather5$Precipitation, "T", "0")
+
+# convert characters to numeric
+weather6 <- mutate_at(weather5, vars(CloudCover:WindDirDegrees), funs(as.numeric))
+
+# preview result
+str(weather6)
+```
+
+Further issues include:
+
+* Finding missing values: in Max.Gust.SpeedMPH
+* Dealing with obvious errors: in Max.Humidity and Mean.VisibilityMiles
+* Dealing with empty strings: in Events
+
+```{r}
+# find missing values
+summary(weather6)
+```
+
+```{r}
+# preview full rows for observations missing values Max.Gust.SpeedMPH
+weather6[is.na(weather6$Max.Gust.SpeedMPH), ]
+```
+
+```{r}
+# preview full row for record with Max.Humidity of 1000 which is an obvious error: humidity from 0 to 100, and use 100 instear
+weather6$Max.Humidity[weather6$Max.Humidity == 1000] <- 100
+
+# preview full row with -1 value for Mean.VisibilityMiles, which should be above 0, and use 10 instead
+weather6$Mean.VisibilityMiles[weather6$Mean.VisibilityMiles == -1] <- 10
+
+# replace empty cells in events column
+weather6$Events[weather6$Events == ""] <- "None"
+```
+
